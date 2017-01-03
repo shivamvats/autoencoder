@@ -9,7 +9,7 @@ from keras.utils import np_utils
 
 from seq2seq import Seq2Seq, AttentionSeq2Seq
 
-from config import BATCH_SIZE, TIME_STEPS, MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE, NUM_EPOCHS
+from config import ACTOR_BATCH_SIZE, TIME_STEPS, MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE, ACTOR_NUM_EPOCHS
 
 from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_sentences, get_train_val_test_data, preprocess_text
 
@@ -18,6 +18,7 @@ class Autoencoder(object):
         self.w2v_model = w2v_model
         self.token_to_index_dic = token_to_index_dic
         self.data_vocab_size = len(token_to_index_dic)
+        self.embedding_matrix = None
         print("Data vocab size= %d" % self.data_vocab_size)
 
     def create_embedding(self):
@@ -72,8 +73,8 @@ class Autoencoder(object):
     def train(self, train_x, train_y, test_x, test_y):
         print("one hot shape ", train_y.shape)
         self.autoencoder.fit(np.asarray(train_x), train_y,
-                        nb_epoch=NUM_EPOCHS,
-                        batch_size=BATCH_SIZE,
+                        nb_epoch=ACTOR_NUM_EPOCHS,
+                        batch_size=ACTOR_BATCH_SIZE,
                         shuffle=True,
                         validation_data=(test_x, test_y),
                         verbose=1)
@@ -91,5 +92,11 @@ class Autoencoder(object):
 def get_w2v_model(filename):
     #Can't use load as file is in C text format.
     return gensim.models.Word2Vec.load_word2vec_format(filename)
+
+def train_w2v_model(sentences):
+    w2v_model = gensim.models.Word2Vec(sentences)
+    #w2v_model.train(sentences)
+    return w2v_model
+
 
 #def predict_output()

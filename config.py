@@ -1,8 +1,15 @@
 TOKEN_REPRESENTATION_SIZE = 200
 
+DATA_FILE = "/home/aries/Documents/Learning/DL/autoencoder/data/all_sentences_6000.pkl"
+USE_SAVED_PREPROCESSED_INPUT = True
+PREPROCESSED_INPUT_FILE = "/home/aries/Documents/Learning/DL/autoencoder/data/preprocessed_sentences_6000.pkl"
+
 PADDING_TOKEN = "#"
-BATCH_SIZE = 32
-NUM_EPOCHS = 100
+
+ACTOR_BATCH_SIZE = 32
+ACTOR_NUM_EPOCHS = 300
+CRITIC_BATCH_SIZE = 32
+CRITIC_NUM_EPOCHS = 2
 
 MAX_SEQ_LEN = 10
 TIME_STEPS = 5
@@ -13,7 +20,7 @@ MAX_VOCAB_SIZE=20000
 VALIDATION_SPLIT = 0.2
 
 LOAD_WEIGHTS=True
-SAVE_WEIGHTS=False
+SAVE_WEIGHTS=True
 WEIGHTS_FILE="./models/simple_lstm.h5"
 
-TRAIN=False
+TRAIN=True

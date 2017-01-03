@@ -1,5 +1,6 @@
 import numpy as np
 import gensim
+import copy
 
 from keras.layers import Input, LSTM, RepeatVector, Activation, Dense, TimeDistributed, Embedding
 from keras.models import Model, Sequential
@@ -9,18 +10,20 @@ from keras.utils import np_utils
 
 from seq2seq import Seq2Seq, AttentionSeq2Seq
 
-from config import BATCH_SIZE, TIME_STEPS, MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE, NUM_EPOCHS
+from config import CRITIC_BATCH_SIZE, CRITIC_NUM_EPOCHS, TIME_STEPS, MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE
 
 from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_sentences, get_train_val_test_data, preprocess_text
+
+from utils import one_hot
 
 from autoencoder import Autoencoder
 
 class ActorCriticAutoEncoder(Autoencoder):
-    def __init__(self, w2v_model, token_to_index_dic):
-        self.w2v_model = w2v_model
-        self.token_to_index_dic = token_to_index_dic
-        self.data_vocab_size = len(token_to_index_dic)
-        print("Data vocab size= %d" % self.data_vocab_size)
+    def __init__(self, w2v_model, token_to_index_dic, actor=None, critic=None):
+        super(ActorCriticAutoEncoder, self).__init__(w2v_model, token_to_index_dic)
+
+        self.actor = actor
+        self.critic = critic
 
     def create_nn_model(self):
         self.create_embedding()
@@ -31,7 +34,7 @@ class ActorCriticAutoEncoder(Autoencoder):
         # This converts the positive indices(integers) into a dense multi-dim representation.
         model = Sequential()
         model.add(Embedding(self.data_vocab_size+1, TOKEN_REPRESENTATION_SIZE,
-            weights=[self.embedding_matrix], trainable=False,
+            weights=[self.get_embedding_matrix()], trainable=False,
             input_shape=(MAX_SEQ_LEN,)))
         model.add(AttentionSeq2Seq(batch_input_shape=(None, MAX_SEQ_LEN,
             TOKEN_REPRESENTATION_SIZE), hidden_dim=100,
@@ -44,7 +47,7 @@ class ActorCriticAutoEncoder(Autoencoder):
     def create_critic_model(self):
         model = Sequential()
         model.add(Embedding(self.data_vocab_size+1, TOKEN_REPRESENTATION_SIZE,
-            weights=[self.embedding_matrix], trainable=False,
+            weights=[self.get_embedding_matrix()], trainable=False,
             input_shape=(MAX_SEQ_LEN,)))
         model.add(AttentionSeq2Seq(batch_input_shape=(None, MAX_SEQ_LEN,
             TOKEN_REPRESENTATION_SIZE), hidden_dim=100,
@@ -56,14 +59,45 @@ class ActorCriticAutoEncoder(Autoencoder):
 
         self.critic = model
 
-    def train_crtic(self, train_x, train_y, test_x, test_y):
-        pass
+    def train_critic(self, ground_truth_seqs, predicted_seqs):
+        # List of lists; list of rewards for each sequence.
 
-    def distance_metric(self, X, Y):
-        """x and y are two sequences of embeddings. This function returns the
+        X = np.asarray([one_hot(row, self.data_vocab_size) for row in ground_truth_seqs])
+        Y = copy.copy(predicted_seqs)
+
+        # Length of sequences.
+        T = len(ground_truth_seqs[0])
+        A = self.data_vocab_size
+
+        train_x = []
+        train_y = []
+
+        # Note that our indexing starts from 0, whereas in the paper, it starts
+        # from 1.
+        print(X)
+        print(Y)
+        for x, y in zip(X, Y):
+            p = self.actor.predict(x)
+            rewards = [self.reward(y, x)]
+            for t in range(T):
+                p_t = p[t]
+                # y[:t+1] as numpy slices from 0 to t-1.
+                print("Summing over softmax to calculate V")
+                V = sum([p_t[j] * self.critic.predict(y[:t+1]) for j in range(A)])
+                print("V calculated")
+                train_y.append(rewards[t] + V)
+                train_x.append(y[:t+1])
+
+        self.critic.fit(np.asarray(train_x), np.asarray(train_y),
+            nb_epoch=CRITIC_NUM_EPOCHS, batch_size=CRITIC_BATCH_SIZE,
+            shuffle=True, #validation_data=(test_x, test_y),
+            verbose=1)
+
+    def similarity(self, X, Y):
+        """X and Y are two sequences of embeddings. This function returns the
         sum of differences of the embeddings"""
 
-        return sum(sum([((x_i - y_i)**2)**(.5) for x_i, y_i in zip(x, y)]) for x, y in zip(X, Y))
+        return sum(sum([np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y)) for x, y in zip(X, Y)]))
 
     def reward(self, predicted_seq, ground_truth_seq):
         """
@@ -88,18 +122,27 @@ class ActorCriticAutoEncoder(Autoencoder):
 
         T = len(predicted_seq)
         assert(T == len(ground_truth_seq))
+        print(predicted_seq)
         for t in range(1, T+1):
             X_1_t = ground_truth_seq[:t]
             Y_1_t = predicted_seq[:t]
-            score = distance_metric(X_1_t, Y_1_t)
+            # Higher the similarity, higher should be the reward. Hence using
+            # cosine similarity.
+            score = self.similarity(X_1_t, Y_1_t)
             R.append(score)
         print(R)
         # Difference of consecutive scores.
         # To be used as reward for tth prediction.
         return [j - i for j, i in zip(R[1:], R)]
 
+    def save(self, filename):
+        self.actor.save(actor_filename)
+        self.critic.save(critic_filename)
 
-
+    def get_embedding_matrix(self):
+        if self.embedding_matrix is None:
+            self.create_embedding()
+        return self.embedding_matrix
 
 
 
