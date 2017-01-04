@@ -1,12 +1,13 @@
 import numpy as np
 import gensim
+import pickle
 
-from autoencoder import Autoencoder, get_w2v_model
+from autoencoder import Autoencoder, get_w2v_model, train_w2v_model
 from utils import one_hot, de_one_hot
-from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_sentences, get_train_val_test_data, preprocess_text
+from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_and_pad_sentences, get_train_val_test_data, preprocess_text
 from actor_critic import ActorCriticAutoEncoder
 
-from config import (WEIGHTS_FILE, SAVE_WEIGHTS, LOAD_WEIGHTS, TRAIN, DATA_FILE,
+from config import (WEIGHTS_FILE, SAVE_WEIGHTS, LOAD_WEIGHTS, TRAIN_ACTOR, TRAIN_CRITIC, DATA_FILE,
     USE_SAVED_PREPROCESSED_INPUT, PREPROCESSED_INPUT_FILE)
 
 
@@ -28,7 +29,7 @@ def main_actorCritic():
     w2v_model = train_w2v_model(sentences)
     print("w2v model trained")
 
-    token_sequences, output_sequences, token_to_index_dic = tokenize_sentences(sentences)
+    token_sequences, output_sequences, token_to_index_dic = tokenize_and_pad_sentences(sentences)
     index_to_word_dic = get_index_to_word_dic(token_to_index_dic)
     token_sequences = np.asarray(token_sequences)
     output_sequences = np.asarray(output_sequences)
@@ -53,21 +54,34 @@ def main_actorCritic():
     if LOAD_WEIGHTS:
         print("Loading saved weights from %s" % WEIGHTS_FILE)
         autoencoder.load_weights(WEIGHTS_FILE)
-    print("Training autoencoder")
 
-    if TRAIN:
+    if TRAIN_ACTOR:
+        print("Training actor")
         autoencoder.train(train_x, train_y,  val_x, val_y)
 
-    if SAVE_WEIGHTS:
-        autoencoder.save(WEIGHTS_FILE)
+        if SAVE_WEIGHTS:
+            print("Saving actor weights")
+            autoencoder.save(WEIGHTS_FILE)
 
+    print("Predicting using actor")
     output = autoencoder.predict(test_x)
+    for seq in output:
+        print(index_to_sentence(index_to_word_dic, [np.argmax(ele) for ele in seq]))
 
+    print("Initializing actorCritic")
     actor_critic = ActorCriticAutoEncoder(w2v_model=w2v_model,
             token_to_index_dic=token_to_index_dic,
             actor=autoencoder.autoencoder)
+    print("Creating critic model")
     actor_critic.create_critic_model()
-    actor_critic.train_critic(train_x, output)
+    print("Critic model created")
+
+    critic_train_x = output
+    critic_train_y = [one_hot(seq, len(token_to_index_dic)) for seq in train_x]
+    if TRAIN_CRITIC:
+        print("Training critic")
+        actor_critic.train_critic(critic_train_x, critic_train_y)
+        print("Critic trained")
 
 
 
@@ -86,7 +100,7 @@ def main_auto():
     #    sentences = preprocess_text(sentences)[:5000]
     print("shape of sentences", sentences.shape)
 
-    token_sequences, output_sequences, token_to_index_dic = tokenize_sentences(sentences)
+    token_sequences, output_sequences, token_to_index_dic = tokenize_and_pad_sentences(sentences)
     index_to_word_dic = get_index_to_word_dic(token_to_index_dic)
     token_sequences = np.asarray(token_sequences)
     output_sequences = np.asarray(output_sequences)
@@ -113,7 +127,7 @@ def main_auto():
         autoencoder.load_weights(WEIGHTS_FILE)
     print("Training autoencoder")
 
-    if TRAIN:
+    if TRAIN_ACTOR:
         autoencoder.train(train_x, train_y,  val_x, val_y)
 
     if SAVE_WEIGHTS:

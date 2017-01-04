@@ -11,7 +11,7 @@ from seq2seq import Seq2Seq, AttentionSeq2Seq
 
 from config import ACTOR_BATCH_SIZE, TIME_STEPS, MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE, ACTOR_NUM_EPOCHS
 
-from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_sentences, get_train_val_test_data, preprocess_text
+from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_and_pad_sentences, get_train_val_test_data, preprocess_text
 
 class Autoencoder(object):
     def __init__(self, w2v_model, token_to_index_dic):
@@ -94,8 +94,8 @@ def get_w2v_model(filename):
     return gensim.models.Word2Vec.load_word2vec_format(filename)
 
 def train_w2v_model(sentences):
-    w2v_model = gensim.models.Word2Vec(sentences)
-    #w2v_model.train(sentences)
+    sentences = [sentence.split(" ") for sentence in sentences]
+    w2v_model = gensim.models.Word2Vec(sentences, size=TOKEN_REPRESENTATION_SIZE, workers=4)
     return w2v_model
 
 

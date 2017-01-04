@@ -23,4 +23,5 @@ LOAD_WEIGHTS=True
 SAVE_WEIGHTS=True
 WEIGHTS_FILE="./models/simple_lstm.h5"
 
-TRAIN=True
+TRAIN_ACTOR=False
+TRAIN_CRITIC=True

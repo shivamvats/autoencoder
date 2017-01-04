@@ -78,7 +78,7 @@ def convert_words_to_embedding(model, words):
         embedding.appen(word_embedding)
     return embedding
 
-def tokenize_sentences(sentences):
+def tokenize_and_pad_sentences(sentences):
     tokenizer = Tokenizer(nb_words=MAX_VOCAB_SIZE)
     tokenizer.fit_on_texts(sentences)
     sequences = tokenizer.texts_to_sequences(sentences)

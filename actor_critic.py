@@ -10,9 +10,9 @@ from keras.utils import np_utils
 
 from seq2seq import Seq2Seq, AttentionSeq2Seq
 
-from config import CRITIC_BATCH_SIZE, CRITIC_NUM_EPOCHS, TIME_STEPS, MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE
+from config import CRITIC_BATCH_SIZE, CRITIC_NUM_EPOCHS, TIME_STEPS, MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE, ACTOR_BATCH_SIZE
 
-from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_sentences, get_train_val_test_data, preprocess_text
+from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_and_pad_sentences, get_train_val_test_data, preprocess_text
 
 from utils import one_hot
 
@@ -55,16 +55,16 @@ class ActorCriticAutoEncoder(Autoencoder):
             depth=1))
         # The output is expected to be one scalar approximating the value of a state.
         model.add(TimeDistributed(Dense(1, activation="linear")))
-        model.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
+        model.compile(optimizer="rmsprop", loss="mse", metrics=["accuracy"])
 
         self.critic = model
 
-    def train_critic(self, ground_truth_seqs, predicted_seqs):
+    def train_critic(self, predicted_seqs_prob, ground_truth_seqs):
         # List of lists; list of rewards for each sequence.
 
-        X = np.asarray([one_hot(row, self.data_vocab_size) for row in ground_truth_seqs])
-        Y = copy.copy(predicted_seqs)
-
+        P = copy.copy(predicted_seqs_prob)
+        X = [[np.argmax(ele) for ele in seq] for seq in predicted_seqs_prob]
+        Y = ground_truth_seqs
         # Length of sequences.
         T = len(ground_truth_seqs[0])
         A = self.data_vocab_size
@@ -74,21 +74,55 @@ class ActorCriticAutoEncoder(Autoencoder):
 
         # Note that our indexing starts from 0, whereas in the paper, it starts
         # from 1.
-        print(X)
-        print(Y)
-        for x, y in zip(X, Y):
-            p = self.actor.predict(x)
-            rewards = [self.reward(y, x)]
+        #P = self.actor.predict(X, batch_size=ACTOR_BATCH_SIZE)
+
+
+        from time import sleep
+
+        print("Predicting rewards of subsequences")
+        V_subse_predicted = self.critic.predict(X)
+        #V_subse_predicted = V_subse_predicted.flatten()
+        print(V_subse_predicted.shape)
+        sleep(10)
+        print("Rewards predicted using critic")
+
+        # Getting the critic to predict one by one is too slow.
+        # Let's collect all the subsequences in a list and predict beforehand.
+        X_subse = []
+        print(np.asarray(X).shape)
+        sleep(10)
+        for x in X:
+            subse_sent = []
+            for i in range(len(x)):
+                subse_sent.append(x[:i+1])
+            X_subse = X_subse + subse_sent
+        X_subse = np.asarray(pad_sequences(X_subse, maxlen=MAX_SEQ_LEN))
+
+
+        i = 0
+        for x, y, p in zip(X, Y, P):
+            print(np.asarray(x).shape)
+            rewards = self.reward(y, x)
+
+            y_seq = []
             for t in range(T):
                 p_t = p[t]
+                #print(p[0])
+                #print(p[1])
+                #print("Summing over softmax to calculate V")
                 # y[:t+1] as numpy slices from 0 to t-1.
-                print("Summing over softmax to calculate V")
-                V = sum([p_t[j] * self.critic.predict(y[:t+1]) for j in range(A)])
-                print("V calculated")
-                train_y.append(rewards[t] + V)
-                train_x.append(y[:t+1])
+                V = sum([p_t[j] * V_subse_predicted[i][t] for j in range(A)])
+                #print("V calculated")
+                y_seq.append(rewards[t] + V)
+            train_y.append(y_seq)
+            i+=1
 
-        self.critic.fit(np.asarray(train_x), np.asarray(train_y),
+        train_x = np.asarray(X)
+        print(train_x[:10])
+        print("\n\n")
+        print(train_y[:10])
+        print(np.asarray(train_x).shape, np.asarray(train_y).shape)
+        self.critic.fit(train_x, train_y,
             nb_epoch=CRITIC_NUM_EPOCHS, batch_size=CRITIC_BATCH_SIZE,
             shuffle=True, #validation_data=(test_x, test_y),
             verbose=1)
@@ -97,7 +131,7 @@ class ActorCriticAutoEncoder(Autoencoder):
         """X and Y are two sequences of embeddings. This function returns the
         sum of differences of the embeddings"""
 
-        return sum(sum([np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y)) for x, y in zip(X, Y)]))
+        return np.mean([np.dot(x, y) / (max(1e-7, np.linalg.norm(x)) * max(1e-7, np.linalg.norm(y))) for x, y in zip(X, Y)])
 
     def reward(self, predicted_seq, ground_truth_seq):
         """
@@ -122,7 +156,7 @@ class ActorCriticAutoEncoder(Autoencoder):
 
         T = len(predicted_seq)
         assert(T == len(ground_truth_seq))
-        print(predicted_seq)
+        #print(predicted_seq)
         for t in range(1, T+1):
             X_1_t = ground_truth_seq[:t]
             Y_1_t = predicted_seq[:t]
