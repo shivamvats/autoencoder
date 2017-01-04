@@ -64,7 +64,7 @@ def main_actorCritic():
             autoencoder.save(WEIGHTS_FILE)
 
     print("Predicting using actor")
-    output = autoencoder.predict(test_x)
+    output = autoencoder.predict(train_x)
     for seq in output:
         print(index_to_sentence(index_to_word_dic, [np.argmax(ele) for ele in seq]))
 

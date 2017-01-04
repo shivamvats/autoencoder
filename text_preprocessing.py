@@ -105,10 +105,11 @@ def get_train_val_test_data(input_data, output_data):
     x_test = input_data[-nb_validation_samples:]
     y_test = output_data[-nb_validation_samples:]
 
-    x_val = x_test[:-20]
-    y_val = y_test[:-20]
-    x_test = x_test[-20:]
-    y_test = y_test[-20:]
+    half_val_samples = nb_validation_samples/2
+    x_val = x_test[:-half_val_samples]
+    y_val = y_test[:-half_val_samples]
+    x_test = x_test[-half_val_samples:]
+    y_test = y_test[-half_val_samples:]
 
     return map(np.asarray, [x_train, y_train, x_val, y_val, x_test, y_test])
 

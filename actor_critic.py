@@ -55,6 +55,7 @@ class ActorCriticAutoEncoder(Autoencoder):
             depth=1))
         # The output is expected to be one scalar approximating the value of a state.
         model.add(TimeDistributed(Dense(1, activation="linear")))
+        model.summary()
         model.compile(optimizer="rmsprop", loss="mse", metrics=["accuracy"])
 
         self.critic = model
@@ -62,7 +63,7 @@ class ActorCriticAutoEncoder(Autoencoder):
     def train_critic(self, predicted_seqs_prob, ground_truth_seqs):
         # List of lists; list of rewards for each sequence.
 
-        P = copy.copy(predicted_seqs_prob)
+        P = np.asarray(copy.copy(predicted_seqs_prob))
         X = [[np.argmax(ele) for ele in seq] for seq in predicted_seqs_prob]
         Y = ground_truth_seqs
         # Length of sequences.
@@ -80,17 +81,13 @@ class ActorCriticAutoEncoder(Autoencoder):
         from time import sleep
 
         print("Predicting rewards of subsequences")
-        V_subse_predicted = self.critic.predict(X)
+        V_subse_predicted = np.asarray(self.critic.predict(X))
         #V_subse_predicted = V_subse_predicted.flatten()
-        print(V_subse_predicted.shape)
-        sleep(10)
         print("Rewards predicted using critic")
 
         # Getting the critic to predict one by one is too slow.
         # Let's collect all the subsequences in a list and predict beforehand.
         X_subse = []
-        print(np.asarray(X).shape)
-        sleep(10)
         for x in X:
             subse_sent = []
             for i in range(len(x)):
@@ -100,27 +97,31 @@ class ActorCriticAutoEncoder(Autoencoder):
 
 
         i = 0
-        for x, y, p in zip(X, Y, P):
-            print(np.asarray(x).shape)
-            rewards = self.reward(y, x)
+        len_x = len(X)
+        print("\n\n")
+        for p, y in zip(P, Y):
+            print("Calculating rewards")
+            rewards = self.reward(y, p)
+            print("Rewards calculated: %d / %d " % (i, len_x))
 
+            print("Calculating target")
             y_seq = []
             for t in range(T):
-                p_t = p[t]
-                #print(p[0])
-                #print(p[1])
-                #print("Summing over softmax to calculate V")
+                #p_t = p[t]
                 # y[:t+1] as numpy slices from 0 to t-1.
-                V = sum([p_t[j] * V_subse_predicted[i][t] for j in range(A)])
-                #print("V calculated")
+                #XXX#
+                # In the original paper, they sum over all the actions/words.
+                # This means, I need V_subse_predicted assuming the last word
+                # is word_i (word_i is every word from vocab). 
+                V = max(P[i][t] * V_subse_predicted[i][t])
+
                 y_seq.append(rewards[t] + V)
             train_y.append(y_seq)
             i+=1
 
         train_x = np.asarray(X)
-        print(train_x[:10])
-        print("\n\n")
-        print(train_y[:10])
+        train_y = np.asarray(train_y)
+        train_y = train_y.reshape(train_y.shape + (1,))
         print(np.asarray(train_x).shape, np.asarray(train_y).shape)
         self.critic.fit(train_x, train_y,
             nb_epoch=CRITIC_NUM_EPOCHS, batch_size=CRITIC_BATCH_SIZE,
@@ -164,7 +165,6 @@ class ActorCriticAutoEncoder(Autoencoder):
             # cosine similarity.
             score = self.similarity(X_1_t, Y_1_t)
             R.append(score)
-        print(R)
         # Difference of consecutive scores.
         # To be used as reward for tth prediction.
         return [j - i for j, i in zip(R[1:], R)]
