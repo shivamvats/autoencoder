@@ -28,10 +28,25 @@ class ActorCriticAutoEncoder(Autoencoder):
     def create_nn_model(self):
         self.create_embedding()
         self.create_actor_model()
-        self.create_critic_model()
+
+    def maximum_layer(X):
+        X = T.max(X, 0)
+
+    def maximum_output_shape(input_shape):
+        return (input_shape[0],)
+
+    def evaluation_function(layers):
+        X = layers[0]
+        X = T.max(X, 0)
+
+        Y = layers[1]
+        return T.sum(T.dot(X, Y))
 
     def create_actor_model(self):
         # This converts the positive indices(integers) into a dense multi-dim representation.
+
+        self.create_critic_model()
+
         model = Sequential()
         model.add(Embedding(self.data_vocab_size+1, TOKEN_REPRESENTATION_SIZE,
             weights=[self.get_embedding_matrix()], trainable=False,
@@ -41,8 +56,14 @@ class ActorCriticAutoEncoder(Autoencoder):
             output_length=MAX_SEQ_LEN, output_dim=TOKEN_REPRESENTATION_SIZE,
             depth=1))
         model.add(TimeDistributed(Dense(self.data_vocab_size+1, activation="softmax")))
-        model.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
-        self.actor = model
+
+        evaluation_model = Sequential()
+        evaluation_model.add(Merge([model, self.critic], mode=evaluation_function))
+
+        evaluation_model.compile(optimizer="rmsprop", loss="mse", metrics=["accuracy"])
+
+        self.actor = actor
+        self.evaluation_of_actor = evaluation_model
 
     def create_critic_model(self):
         model = Sequential()
@@ -60,6 +81,23 @@ class ActorCriticAutoEncoder(Autoencoder):
 
         self.critic = model
 
+    def train_actor(self, input_sequences, target):
+        output = self.actor.predict(input_sequences)
+
+        # Q_pi will contain Q value of all prefixes also since the last layer
+        # of the critic is timeDistributed.
+        Q_pi = self.critic.predict(output)
+
+        output_p = [[np.max(word) for word in sent] for sent in output]
+        actor_target = []
+
+        # dJ = d( Sum(Pr(a | Y) * Q(a | Y)) )
+        for sent, q in zip(output_p, Q_pi):
+            actor_target.append(np.sum(np.dot(sent, q)))
+
+        self.evaluation_of_actor.fit(input_sequences, actor_target, batch_size=ACTOR_BATCH_SIZE
+
+
     def train_critic(self, predicted_seqs_prob, ground_truth_seqs):
         # List of lists; list of rewards for each sequence.
 
@@ -75,11 +113,6 @@ class ActorCriticAutoEncoder(Autoencoder):
 
         # Note that our indexing starts from 0, whereas in the paper, it starts
         # from 1.
-        #P = self.actor.predict(X, batch_size=ACTOR_BATCH_SIZE)
-
-
-        from time import sleep
-
         print("Predicting rewards of subsequences")
         V_subse_predicted = np.asarray(self.critic.predict(X))
         #V_subse_predicted = V_subse_predicted.flatten()

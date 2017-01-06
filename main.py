@@ -104,10 +104,62 @@ def pretrain_actorCritic():
             actor_critic.save(PRETRAINING_CRITIC_MODEL_NAME)
             print("Critic saved")
 
-#def train_actorCritic():
+def train_actorCritic():
+    sentences = pickle.load(open(PREPROCESSED_DATA_FILE, 'r'))
+    print("shape of sentences", sentences.shape)
 
+    print("Training w2v model")
+    w2v_model = train_w2v_model(sentences)
+    print("w2v model trained")
 
+    token_sequences, output_sequences, token_to_index_dic = tokenize_and_pad_sentences(sentences)
+    index_to_word_dic = get_index_to_word_dic(token_to_index_dic)
+    token_sequences = np.asarray(token_sequences)
+    output_sequences = np.asarray(output_sequences)
+    print("input shape", token_sequences.shape)
 
+    output_sequences = [one_hot(seq, len(token_to_index_dic)) for seq in output_sequences]
+    print("Tokenization done. %d sequences" % len(token_sequences), "shape ", token_sequences.shape)
+    #token_to_index_dic = get_word_to_index_dic(w2v_model, token_sequences)
+    print("preprocessing done")
+    train_x, train_y, val_x, val_y, test_x, test_y  = get_train_val_test_data(token_sequences, output_sequences)
+
+    if LOAD_WEIGHTS:
+        print("Loading saved weights from %s" % PRETRAINING_ACTOR_WEIGHTS_FILE)
+        autoencoder.load_weights(PRETRAINING_ACTOR_WEIGHTS_FILE)
+
+    if TRAIN_ACTOR:
+        print("Training actor")
+        autoencoder.train(train_x, train_y,  val_x, val_y)
+
+        if SAVE_WEIGHTS:
+            print("Saving actor weights")
+            autoencoder.save(PRETRAINING_ACTOR_WEIGHTS_FILE)
+
+    print("Predicting using actor")
+    output = autoencoder.predict(train_x)
+    for seq in output:
+        print(index_to_sentence(index_to_word_dic, [np.argmax(ele) for ele in seq]))
+
+    print("Initializing actorCritic")
+    actor_critic = ActorCriticAutoEncoder(w2v_model=w2v_model,
+            token_to_index_dic=token_to_index_dic,
+            actor=autoencoder.autoencoder)
+    print("Creating critic model")
+    actor_critic.create_critic_model()
+    print("Critic model created")
+
+    critic_train_x = output
+    critic_train_y = [one_hot(seq, len(token_to_index_dic)) for seq in train_x]
+    if TRAIN_CRITIC:
+        print("Training critic")
+        actor_critic.train_critic(critic_train_x, critic_train_y)
+        print("Critic trained")
+
+        if SAVE_WEIGHTS:
+            print("Saving critic")
+            actor_critic.save(PRETRAINING_CRITIC_MODEL_NAME)
+            print("Critic saved")
 
 def main_auto():
     print("Loading w2v model")
