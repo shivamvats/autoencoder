@@ -1,28 +1,44 @@
 import numpy as np
 import gensim
 import pickle
+import cPickle
 
 from autoencoder import Autoencoder, get_w2v_model, train_w2v_model
 from utils import one_hot, de_one_hot
 from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_and_pad_sentences, get_train_val_test_data, preprocess_text
 from actor_critic import ActorCriticAutoEncoder
 
-from config import (WEIGHTS_FILE, SAVE_WEIGHTS, LOAD_WEIGHTS, TRAIN_ACTOR, TRAIN_CRITIC, DATA_FILE,
-    USE_SAVED_PREPROCESSED_INPUT, PREPROCESSED_INPUT_FILE)
+from config import (PRETRAINING_ACTOR_WEIGHTS_FILE, SAVE_WEIGHTS, LOAD_WEIGHTS,
+        TRAIN_ACTOR, TRAIN_CRITIC, PRETRAINING_DATA_FILE,
+        USE_SAVED_PREPROCESSED_INPUT, PRETRAINING_PREPROCESSED_INPUT_FILE,
+        PRETRAINING_CRITIC_MODEL_NAME, MOTHER_INPUT_FILE, DATA_FILE, PREPROCESSED_DATA_FILE)
 
 
 DEBUG = 1
 
-def main_actorCritic():
+def preprocess_and_save_data(data_file_name, preprocessed_data_file_name):
+    print("Loading data")
+    sentences = load_data(MOTHER_INPUT_FILE)[:8000]
+    print("Data loaded")
 
-    #print("Loading data")
-    #sentences = load_data(DATA_FILE)
-    #print("Data loaded")
+    with open(data_file_name, 'wb') as f:
+        cPickle.dump(sentences, f)
+    print("Data saved")
 
+    sentences = preprocess_text(sentences)
+
+    with open(preprocessed_data_file_name, 'wb') as f:
+        cPickle.dump(sentences, f)
+    print("Preprocessed data saved")
+
+def pretrain_actorCritic():
     if USE_SAVED_PREPROCESSED_INPUT:
-        sentences = pickle.load(open(PREPROCESSED_INPUT_FILE, 'r'))[:5000]
-    #else:
-    #    sentences = preprocess_text(sentences)[:5000]
+        sentences = pickle.load(open(PRETRAINING_PREPROCESSED_INPUT_FILE, 'r'))[:5000]
+    else:
+        print("Loading data")
+        sentences = load_data(PRETRAINING_DATA_FILE)
+        print("Data loaded")
+        sentences = preprocess_text(sentences)[:5000]
     print("shape of sentences", sentences.shape)
 
     print("Training w2v model")
@@ -52,8 +68,8 @@ def main_actorCritic():
     print("NN model created")
 
     if LOAD_WEIGHTS:
-        print("Loading saved weights from %s" % WEIGHTS_FILE)
-        autoencoder.load_weights(WEIGHTS_FILE)
+        print("Loading saved weights from %s" % PRETRAINING_ACTOR_WEIGHTS_FILE)
+        autoencoder.load_weights(PRETRAINING_ACTOR_WEIGHTS_FILE)
 
     if TRAIN_ACTOR:
         print("Training actor")
@@ -61,7 +77,7 @@ def main_actorCritic():
 
         if SAVE_WEIGHTS:
             print("Saving actor weights")
-            autoencoder.save(WEIGHTS_FILE)
+            autoencoder.save(PRETRAINING_ACTOR_WEIGHTS_FILE)
 
     print("Predicting using actor")
     output = autoencoder.predict(train_x)
@@ -83,6 +99,14 @@ def main_actorCritic():
         actor_critic.train_critic(critic_train_x, critic_train_y)
         print("Critic trained")
 
+        if SAVE_WEIGHTS:
+            print("Saving critic")
+            actor_critic.save(PRETRAINING_CRITIC_MODEL_NAME)
+            print("Critic saved")
+
+#def train_actorCritic():
+
+
 
 
 def main_auto():
@@ -91,11 +115,11 @@ def main_auto():
     print("w2v model loaded")
 
     #print("Loading data")
-    #sentences = load_data(DATA_FILE)
+    #sentences = load_data(PRETRAINING_DATA_FILE)
     #print("Data loaded")
 
     if USE_SAVED_PREPROCESSED_INPUT:
-        sentences = pickle.load(open(PREPROCESSED_INPUT_FILE, 'r'))[:5000]
+        sentences = pickle.load(open(PRETRAINING_PREPROCESSED_INPUT_FILE, 'r'))[:5000]
     #else:
     #    sentences = preprocess_text(sentences)[:5000]
     print("shape of sentences", sentences.shape)
@@ -123,15 +147,15 @@ def main_auto():
     print("NN model created")
 
     if LOAD_WEIGHTS:
-        print("Loading saved weights from %s" % WEIGHTS_FILE)
-        autoencoder.load_weights(WEIGHTS_FILE)
+        print("Loading saved weights from %s" % PRETRAINING_ACTOR_WEIGHTS_FILE)
+        autoencoder.load_weights(PRETRAINING_ACTOR_WEIGHTS_FILE)
     print("Training autoencoder")
 
     if TRAIN_ACTOR:
         autoencoder.train(train_x, train_y,  val_x, val_y)
 
     if SAVE_WEIGHTS:
-        autoencoder.save(WEIGHTS_FILE)
+        autoencoder.save(PRETRAINING_ACTOR_WEIGHTS_FILE)
 
     output = autoencoder.predict(test_x)
 
@@ -151,11 +175,4 @@ def main_auto():
 def index_to_sentence(index_to_word_dic, seq):
     return " ".join([index_to_word_dic[ele] for ele in seq])
 
-main_actorCritic()
-
-
-
-
-
-
-
+#preprocess_and_save_data(DATA_FILE, PREPROCESSED_DATA_FILE)

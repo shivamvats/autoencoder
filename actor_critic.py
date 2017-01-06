@@ -170,7 +170,7 @@ class ActorCriticAutoEncoder(Autoencoder):
         return [j - i for j, i in zip(R[1:], R)]
 
     def save(self, filename):
-        self.actor.save(actor_filename)
+        #self.actor.save(actor_filename)
         self.critic.save(critic_filename)
 
     def get_embedding_matrix(self):
