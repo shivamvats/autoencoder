@@ -51,55 +51,46 @@ class ActorCriticAutoEncoder(Autoencoder):
 
         #####Sequential model with Attention#######
 
-        #model = Sequential()
-        #model.add(Embedding(self.data_vocab_size+1, TOKEN_REPRESENTATION_SIZE,
-        #    weights=[self.get_embedding_matrix()], trainable=False,
-        #    input_shape=(MAX_SEQ_LEN,)))
-        #model.add(AttentionSeq2Seq(batch_input_shape=(None, MAX_SEQ_LEN,
-        #    TOKEN_REPRESENTATION_SIZE), hidden_dim=100,
-        #    output_length=MAX_SEQ_LEN, output_dim=TOKEN_REPRESENTATION_SIZE,
-        #    depth=1))
-        #model.add(TimeDistributed(Dense(self.data_vocab_size+1, activation="softmax")))
-        #model.summary()
-
-        #self.prediction_fn = K.function([model.input], [model.output])
-        #Q_pi = K.dmatrix('Q_pi')
-        #X = model.output
-        #evaluation = evaluation_function(X, Q_pi)
-        #loss = -evaluation
-
-        #self.evaluation_fn = K.function([X, Q_pi], [evaluation])
-        #evaluation_model = Sequential()
-        #evaluation_model.add(Merge([model, self.critic], mode=evaluation_function, output_shape=evaluation_output_shape))
+        model = Sequential()
+        model.add(Embedding(self.data_vocab_size+1, TOKEN_REPRESENTATION_SIZE,
+            weights=[self.get_embedding_matrix()], trainable=False,
+            input_shape=(MAX_SEQ_LEN,)))
+        model.add(AttentionSeq2Seq(batch_input_shape=(None, MAX_SEQ_LEN,
+            TOKEN_REPRESENTATION_SIZE), hidden_dim=100,
+            output_length=MAX_SEQ_LEN, output_dim=TOKEN_REPRESENTATION_SIZE,
+            depth=1))
+        model.add(TimeDistributed(Dense(self.data_vocab_size+1, activation="softmax")))
+        model.summary()
+        self.actor = model
 
         #####Functional model without Attention #######
 
-        input = Input(shape=(MAX_SEQ_LEN,))
-        embedding = Embedding(self.data_vocab_size+1,
-                TOKEN_REPRESENTATION_SIZE,
-                weights=[self.get_embedding_matrix()], trainable=False)(input)
-        encoder = LSTM(100)(embedding)
-        repeat = RepeatVector(MAX_SEQ_LEN)(encoder)
-        decoder = LSTM(TOKEN_REPRESENTATION_SIZE, return_sequences=True)(repeat)
-        prediction = TimeDistributed(Dense(self.data_vocab_size+1,
-            activation="softmax"))(decoder)
+        #input = Input(shape=(MAX_SEQ_LEN,))
+        #embedding = Embedding(self.data_vocab_size+1,
+        #        TOKEN_REPRESENTATION_SIZE,
+        #        weights=[self.get_embedding_matrix()], trainable=False)(input)
+        #encoder = LSTM(100)(embedding)
+        #repeat = RepeatVector(MAX_SEQ_LEN)(encoder)
+        #decoder = LSTM(TOKEN_REPRESENTATION_SIZE, return_sequences=True)(repeat)
+        #prediction = TimeDistributed(Dense(self.data_vocab_size+1,
+        #    activation="softmax"))(decoder)
 
-        self.prediction_model = Model(input=input, output=prediction)
+        #self.actor = Model(input=input, output=prediction)
 
         optimizer = RMSprop()
 
-        P = self.prediction_model.output
+        P = self.actor.output
         Q_pi = K.placeholder(shape=(MAX_SEQ_LEN,))
 
         # loss = - evaluation
         # evaluation = Sum( prob * Q_pi )
         loss = - K.sum(K.dot(K.max(P), Q_pi))
+
         updates = optimizer.get_updates(
-                self.prediction_model.trainable_weights,
-                self.prediction_model.constraints, loss)
+                self.actor.trainable_weights,
+                self.actor.constraints, loss)
 
-
-        self.evaluation_fn = K.function([self.prediction_model.input, Q_pi], [loss], updates=updates)
+        self.evaluation_fn = K.function([self.actor.input, Q_pi], [loss], updates=updates)
 
         print("Actor model created")
 
