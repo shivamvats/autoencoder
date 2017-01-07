@@ -2,17 +2,24 @@ import numpy as np
 import gensim
 import copy
 
-from keras.layers import Input, LSTM, RepeatVector, Activation, Dense, TimeDistributed, Embedding
+from keras.layers import (Input, LSTM, RepeatVector, Activation, Dense,
+        TimeDistributed, Embedding, Merge)
 from keras.models import Model, Sequential
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import np_utils
+from keras.optimizers import RMSprop
+
+from keras import backend as K
 
 from seq2seq import Seq2Seq, AttentionSeq2Seq
 
-from config import CRITIC_BATCH_SIZE, CRITIC_NUM_EPOCHS, TIME_STEPS, MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE, ACTOR_BATCH_SIZE
+from config import (CRITIC_BATCH_SIZE, CRITIC_NUM_EPOCHS, TIME_STEPS,
+        MAX_SEQ_LEN, TOKEN_REPRESENTATION_SIZE, ACTOR_BATCH_SIZE)
 
-from text_preprocessing import get_word_to_index_dic, get_index_to_word_dic, load_data, tokenize_and_pad_sentences, get_train_val_test_data, preprocess_text
+from text_preprocessing import (get_word_to_index_dic, get_index_to_word_dic,
+        load_data, tokenize_and_pad_sentences, get_train_val_test_data,
+        preprocess_text)
 
 from utils import one_hot
 
@@ -29,41 +36,72 @@ class ActorCriticAutoEncoder(Autoencoder):
         self.create_embedding()
         self.create_actor_model()
 
-    def maximum_layer(X):
-        X = T.max(X, 0)
-
-    def maximum_output_shape(input_shape):
-        return (input_shape[0],)
-
-    def evaluation_function(layers):
-        X = layers[0]
-        X = T.max(X, 0)
-
-        Y = layers[1]
-        return T.sum(T.dot(X, Y))
 
     def create_actor_model(self):
-        # This converts the positive indices(integers) into a dense multi-dim representation.
+        # This converts the positive indices(integers) into a dense multi-dim
+        # representation.
+
+
+        def evaluation_output_shape(input_shapes):
+            input_shape = input_shapes[0]
+            return (input_shape[0], input_shape[1])
+
 
         self.create_critic_model()
 
-        model = Sequential()
-        model.add(Embedding(self.data_vocab_size+1, TOKEN_REPRESENTATION_SIZE,
-            weights=[self.get_embedding_matrix()], trainable=False,
-            input_shape=(MAX_SEQ_LEN,)))
-        model.add(AttentionSeq2Seq(batch_input_shape=(None, MAX_SEQ_LEN,
-            TOKEN_REPRESENTATION_SIZE), hidden_dim=100,
-            output_length=MAX_SEQ_LEN, output_dim=TOKEN_REPRESENTATION_SIZE,
-            depth=1))
-        model.add(TimeDistributed(Dense(self.data_vocab_size+1, activation="softmax")))
+        #####Sequential model with Attention#######
 
-        evaluation_model = Sequential()
-        evaluation_model.add(Merge([model, self.critic], mode=evaluation_function))
+        #model = Sequential()
+        #model.add(Embedding(self.data_vocab_size+1, TOKEN_REPRESENTATION_SIZE,
+        #    weights=[self.get_embedding_matrix()], trainable=False,
+        #    input_shape=(MAX_SEQ_LEN,)))
+        #model.add(AttentionSeq2Seq(batch_input_shape=(None, MAX_SEQ_LEN,
+        #    TOKEN_REPRESENTATION_SIZE), hidden_dim=100,
+        #    output_length=MAX_SEQ_LEN, output_dim=TOKEN_REPRESENTATION_SIZE,
+        #    depth=1))
+        #model.add(TimeDistributed(Dense(self.data_vocab_size+1, activation="softmax")))
+        #model.summary()
 
-        evaluation_model.compile(optimizer="rmsprop", loss="mse", metrics=["accuracy"])
+        #self.prediction_fn = K.function([model.input], [model.output])
+        #Q_pi = K.dmatrix('Q_pi')
+        #X = model.output
+        #evaluation = evaluation_function(X, Q_pi)
+        #loss = -evaluation
 
-        self.actor = actor
-        self.evaluation_of_actor = evaluation_model
+        #self.evaluation_fn = K.function([X, Q_pi], [evaluation])
+        #evaluation_model = Sequential()
+        #evaluation_model.add(Merge([model, self.critic], mode=evaluation_function, output_shape=evaluation_output_shape))
+
+        #####Functional model without Attention #######
+
+        input = Input(shape=(MAX_SEQ_LEN,))
+        embedding = Embedding(self.data_vocab_size+1,
+                TOKEN_REPRESENTATION_SIZE,
+                weights=[self.get_embedding_matrix()], trainable=False)(input)
+        encoder = LSTM(100)(embedding)
+        repeat = RepeatVector(MAX_SEQ_LEN)(encoder)
+        decoder = LSTM(TOKEN_REPRESENTATION_SIZE, return_sequences=True)(repeat)
+        prediction = TimeDistributed(Dense(self.data_vocab_size+1,
+            activation="softmax"))(decoder)
+
+        self.prediction_model = Model(input=input, output=prediction)
+
+        optimizer = RMSprop()
+
+        P = self.prediction_model.output
+        Q_pi = K.placeholder(shape=(MAX_SEQ_LEN,))
+
+        # loss = - evaluation
+        # evaluation = Sum( prob * Q_pi )
+        loss = - K.sum(K.dot(K.max(P), Q_pi))
+        updates = optimizer.get_updates(
+                self.prediction_model.trainable_weights,
+                self.prediction_model.constraints, loss)
+
+
+        self.evaluation_fn = K.function([self.prediction_model.input, Q_pi], [loss], updates=updates)
+
+        print("Actor model created")
 
     def create_critic_model(self):
         model = Sequential()
@@ -76,12 +114,13 @@ class ActorCriticAutoEncoder(Autoencoder):
             depth=1))
         # The output is expected to be one scalar approximating the value of a state.
         model.add(TimeDistributed(Dense(1, activation="linear")))
+        print("Critic model created")
         model.summary()
         model.compile(optimizer="rmsprop", loss="mse", metrics=["accuracy"])
 
         self.critic = model
 
-    def train_actor(self, input_sequences, target):
+    def train_actor(self, input_sequences):
         output = self.actor.predict(input_sequences)
 
         # Q_pi will contain Q value of all prefixes also since the last layer
@@ -95,7 +134,7 @@ class ActorCriticAutoEncoder(Autoencoder):
         for sent, q in zip(output_p, Q_pi):
             actor_target.append(np.sum(np.dot(sent, q)))
 
-        self.evaluation_of_actor.fit(input_sequences, actor_target, batch_size=ACTOR_BATCH_SIZE
+        self.evaluation_of_actor.fit([input_sequences, output], actor_target, batch_size=ACTOR_BATCH_SIZE)
 
 
     def train_critic(self, predicted_seqs_prob, ground_truth_seqs):
