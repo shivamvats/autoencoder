@@ -1,8 +1,8 @@
 MOTHER_INPUT_FILE = "./data/all_sentences.pkl"
 
-PRETRAINING_DATA_FILE = "/home/aries/Documents/Learning/DL/autoencoder/data/all_sentences_6000.pkl"
+PRETRAINING_DATA_FILE = "./data/all_sentences_6000.pkl"
 USE_SAVED_PREPROCESSED_INPUT = True
-PRETRAINING_PREPROCESSED_INPUT_FILE = "/home/aries/Documents/Learning/DL/autoencoder/data/preprocessed_sentences_6000.pkl"
+PRETRAINING_PREPROCESSED_INPUT_FILE = "./data/preprocessed_sentences_6000.pkl"
 
 DATA_FILE = "./data/all_sentences_8000.pkl"
 PREPROCESSED_DATA_FILE = "./data/preprocessed_sentences_8000.pkl"
@@ -26,7 +26,7 @@ VALIDATION_SPLIT = 0.2
 LOAD_WEIGHTS=True
 SAVE_WEIGHTS=True
 PRETRAINING_ACTOR_WEIGHTS_FILE="./models/simple_lstm.h5"
-PRETRAINING_CRITIC_MODEL_NAME = "./models/pretraining_critic_model"
+PRETRAINING_CRITIC_MODEL_FILE = "./models/pretraining_critic_model"
 
 TRAIN_ACTOR=False
 TRAIN_CRITIC=True

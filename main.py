@@ -11,7 +11,7 @@ from actor_critic import ActorCriticAutoEncoder
 from config import (PRETRAINING_ACTOR_WEIGHTS_FILE, SAVE_WEIGHTS, LOAD_WEIGHTS,
         TRAIN_ACTOR, TRAIN_CRITIC, PRETRAINING_DATA_FILE,
         USE_SAVED_PREPROCESSED_INPUT, PRETRAINING_PREPROCESSED_INPUT_FILE,
-        PRETRAINING_CRITIC_MODEL_NAME, MOTHER_INPUT_FILE, DATA_FILE, PREPROCESSED_DATA_FILE)
+        PRETRAINING_CRITIC_MODEL_FILE, MOTHER_INPUT_FILE, DATA_FILE, PREPROCESSED_DATA_FILE)
 
 
 DEBUG = 1
@@ -101,7 +101,7 @@ def pretrain_actorCritic():
 
         if SAVE_WEIGHTS:
             print("Saving critic")
-            actor_critic.save(PRETRAINING_CRITIC_MODEL_NAME)
+            actor_critic.save_critic(PRETRAINING_CRITIC_MODEL_FILE)
             print("Critic saved")
 
 def train_actorCritic():
@@ -135,6 +135,8 @@ def train_actorCritic():
     print("Loading saved weights from %s" % PRETRAINING_ACTOR_WEIGHTS_FILE)
     actor_critic.actor.load_weights(PRETRAINING_ACTOR_WEIGHTS_FILE)
 
+    print("Loading saved weights from %s" % PRETRAINING_CRITIC_MODEL_FILE)
+    actor_critic.critic.load_weights(PRETRAINING_CRITIC_MODEL_FILE)
 
     #critic_train_x = output
     #critic_train_y = [one_hot(seq, len(token_to_index_dic)) for seq in train_x]
@@ -215,4 +217,5 @@ def index_to_sentence(index_to_word_dic, seq):
     return " ".join([index_to_word_dic[ele] for ele in seq])
 
 #preprocess_and_save_data(DATA_FILE, PREPROCESSED_DATA_FILE)
+#pretrain_actorCritic()
 train_actorCritic()

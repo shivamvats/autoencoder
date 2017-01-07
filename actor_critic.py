@@ -125,7 +125,7 @@ class ActorCriticAutoEncoder(Autoencoder):
         for sent, q in zip(output_p, Q_pi):
             actor_target.append(np.sum(np.dot(sent, q)))
 
-        self.evaluation_of_actor.fit([input_sequences, output], actor_target, batch_size=ACTOR_BATCH_SIZE)
+        self.evaluation_fn.fit([input_sequences, output], actor_target, batch_size=ACTOR_BATCH_SIZE)
 
 
     def train_critic(self, predicted_seqs_prob, ground_truth_seqs):
@@ -232,8 +232,10 @@ class ActorCriticAutoEncoder(Autoencoder):
         # To be used as reward for tth prediction.
         return [j - i for j, i in zip(R[1:], R)]
 
-    def save(self, filename):
-        #self.actor.save(actor_filename)
+    def save_actor(self, actor_filename):
+        self.actor.save(actor_filename)
+
+    def save_critic(self, critic_filename):
         self.critic.save(critic_filename)
 
     def get_embedding_matrix(self):
