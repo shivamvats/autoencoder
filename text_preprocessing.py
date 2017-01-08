@@ -14,6 +14,44 @@ from keras.preprocessing.sequence import pad_sequences
 from keras.utils import np_utils
 from nltk.tokenize import RegexpTokenizer
 
+class MySentences(object):
+    def __init__(self, filename, preprocess=True):
+        self.filename = filename
+        self.preprocess = preprocess
+
+    def __iter__(self):
+        with open(self.filename) as f:
+            while True:
+                try:
+                    line = pickle.load(f)
+                    if self.preprocess:
+                        line = self.preprocessLine(line)
+                    yield line.split(" ")
+                except EOFError:
+                    break
+
+    def preprocessLine(self, line):
+        # Lower case
+        lower_line = line.lower()
+
+        tokenizer = RegexpTokenizer(r'\w+')
+        processed_line = " ".join(tokenizer.tokenize(lower_line))
+
+        return processed_line
+
+    def processAndSave(self, preprocessedFile, numLines):
+        with open(self.filename) as f, open(preprocessedFile, 'wb') as f2:
+            while True:
+                try:
+                    line = pickle.load(f)
+                    if self.preprocess:
+                        line = self.preprocessLine(line)
+                    f2.dump(line, f2)
+                except EOFError:
+                    break
+
+
+
 def load_data(filename):
     sentences = pickle.load(open(filename, "rb"))
     print("Loaded data")
@@ -123,10 +161,3 @@ def preprocess_text(sentences):
         processed_seqs.append(" ".join(tokenizer.tokenize(seq)))
 
     return np.asarray(processed_seqs)
-
-#def get_embeddings(w2v_model, sequences):
-#    # At the point, all the sequences are of the same length.
-#    # So we can input then to a fixes sized NN.
-#    embedding = [get_vectorized_token_sequence(sequence, w2v_model,
-#        TOKEN_REPRESENTATION_SIZE, False) for sequence in preprocessed_sequences]
-#    return embedding

@@ -33,7 +33,8 @@ def preprocess_and_save_data(data_file_name, preprocessed_data_file_name):
 
 def pretrain_actorCritic():
     if USE_SAVED_PREPROCESSED_INPUT:
-        sentences = pickle.load(open(PRETRAINING_PREPROCESSED_INPUT_FILE, 'r'))[:5000]
+        #sentences = pickle.load(open(PRETRAINING_PREPROCESSED_INPUT_FILE, 'r'))[:5000]
+        sentences = 
     else:
         print("Loading data")
         sentences = load_data(PRETRAINING_DATA_FILE)
